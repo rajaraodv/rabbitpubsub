@@ -183,7 +183,20 @@ With the above configuration, sessions will now be stored in Redis. And also, if
 So far with the above setup our sessions are taken care of but if we are using Socket.io's default pub-sub, it will work only for 1 sever instance.
 i.e. if user1 & user2 are on server instance #1, they both can chat with each other. But if they are on different server instances they can't.
 
-So we will update our server to use RabbitMQ as PubSub service. First we will create an exchange called `chatExchange` of type `fanout`. This means any message that comes to this exchange (from producers) are sent to ALL consumers.
+So we will update our server to use RabbitMQ as PubSub service. 
+
+But if you are completely new to RabbitMQ, here are some of the basics. ***click on the pics to see them in full size***
+
+<p align="center">
+<span style='align:left'> <img src="https://github.com/rajaraodv/rabbitpubsub/raw/master/pics/rabbitmqBasics1.png" height="250px" width="350px" /></span><span style='align:left'> 
+<img src="https://github.com/rajaraodv/rabbitpubsub/raw/master/pics/rabbitmqBasics2.png" height="250px" width="350px" /></span>
+<span style='align:left'> 
+<img src="https://github.com/rajaraodv/rabbitpubsub/raw/master/pics/rabbitmqBasics3.png" height="250px" width="350px" /></span>
+</p>
+
+To learn more about RabbitMQ, please visit: <a href='http://www.rabbitmq.com' target='_blank'>RabbitMQ</a>
+
+First we will create an exchange called `chatExchange` of type `fanout`. This means any message that comes to this exchange (from producers) are sent to ALL consumers.
 
 ```javascript
 var rabbitConn = amqp.createConnection({});
