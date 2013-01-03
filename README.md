@@ -183,53 +183,60 @@ With the above configuration, sessions will now be stored in Redis. And also, if
 So far with the above setup our sessions are taken care of but if we are using Socket.io's default pub-sub, it will work only for 1 sever instance.
 i.e. if user1 & user2 are on server instance #1, they both can chat with each other. But if they are on different server instances they can't.
 
-So we will update our server to use Redis as PubSub service (along with session-store). PS: Redis natively supports pub-sub operations. All we need to do is to create a publisher, a subscriber & a channel and we will be good.
+So we will update our server to use RabbitMQ as PubSub service. First we will create an exchange called `chatExchange` of type `fanout`. This means any message that comes to this exchange (from producers) are sent to ALL consumers.
 
 ```javascript
-//instead of using socket.io's default pub-sub..
+var rabbitConn = amqp.createConnection({});
+var chatExchange;
+rabbitConn.on('ready', function () {
+    chatExchange = rabbitConn.exchange('chatExchange', {'type':'fanout'});
+});
+```
+
+And when the browser connects via Socket.io, we will publish chat messages and join-notifications via `chatExchange.publish(..)`. And we will then create a  queue `rabbitConn.queue (…)`, bind that queue to listen to all messages ` q.bind('chatExchange', "#");` and finally create a subscriber callback function `q.subscribe(function (message) {…} )` to which all the messages are sent.
+
+```javascript
 
 sessionSockets.on('connection', function (err, socket, session) {
-   socket.on('chat', function(data){
-        socket.emit('chat', data);
-        socket.broadcast.emit('chat', data);
-   });
-
-   socket.on('join', function(data){
-        socket.emit('chat', {msg: 'user joined'});
-        socket.broadcast.emit('chat', {msg: 'user joined'});
-  });
-}
-
-
-//We will use Redis to do pub-sub
-
-/*
- Create two redis connections. A 'pub' for publishing and a 'sub' for subscribing.
- Subscribe 'sub' connection to 'chat' channel.
- */
-var sub = redis.createClient();
-var pub = redis.createClient();
-sub.subscribe('chat');
-
-
-sessionSockets.on('connection', function (err, socket, session) {
-   socket.on('chat', function(data){
-        pub.publish('chat', data);
-   });
-
-   socket.on('join', function(data){
-        pub.publish('chat', {msg: 'user joined'});
-  });
-
-   /*
-     Use Redis' 'sub' (subscriber) client to listen to any message from Redis to server.
-     When a message arrives, send it back to browser using socket.io
-   */
-    sub.on('message', function (channel, message) {
-        socket.emit(channel, message);
+    /*
+     When a user sends a chat message, publish it to chatExchange w/o binding key (bindingKey doesn't matter
+     because chatExchange is fanout).
+     Notice that we are getting user's name from session.
+     */
+    socket.on('chat', function (data) {
+        var msg = JSON.parse(data);
+        var reply = {action:'message', user:session.user, msg:msg.msg };
+        // pub.publish('chat', reply);
+        chatExchange.publish('', reply);
     });
-}
 
+    /*
+     When a user joins, publish it to chatExchange w/o binding key (bindingKey doesn't matter
+     because chatExchange is fanout).
+     Notice that we are getting user's name from session.
+     */
+    socket.on('join', function () {
+        var reply = {action:'control', user:session.user, msg:' joined the channel' };
+        chatExchange.publish('', reply);
+    });
+
+
+    /*Initialize subscriber queue.
+     First create a queue w/o any name. This forces RabbitMQ to create new queue
+     for every socket.io connection w/ a new random queue name.
+     Then bind the queue to chatExchange and listen to ALL messages
+     Lastly, create a consumer (via .subscribe) that waits for messages from RabbitMQ. And when
+     a message comes, send it to the browser.
+
+     Notice that we are creating this w/in sessionSockets.on('connection' to create NEW queue for every connection
+     */
+    rabbitConn.queue('', {exclusive:true}, function (q) {
+        q.bind('chatExchange', "#"); // bind to chat ALL channel/bindingKey
+        q.subscribe(function (message) {
+            socket.emit('chat', JSON.stringify(message));
+        });
+    });
+});
 ```
 
 
@@ -239,7 +246,7 @@ So the app's architecture will now look like this:
 </p>
 <br>
 <br>
-## Handling server scale-down /crashing / restarting
+## Handling server scale-down / crashing / restarting
 In theory, our app will work fine as long as all the server instances are running. But what happens if the server is restarted or scaled down or one of the instances crash? How do we handle that?
 
 But let's first understand what happens in that situation.
