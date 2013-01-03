@@ -17,18 +17,18 @@ The main objective of this project is to build a simple chat app and tackle such
 
 ***Final architecture:***
 
-<p>
+<p align='center'>
 <img src="https://github.com/rajaraodv/rabbitpubsub/raw/master/pics/finalArchitecture.png" height="" width="450px" />
 </p>
 
 ***Login page:***
 
-<p>
+<p align='center'>
 <img src="https://github.com/rajaraodv/rabbitpubsub/raw/master/pics/chatAppPage1.png" height="" width="450px" />
 </p>
 
 ***Chat page:***
-<p>
+<p align='center'>
 <img src="https://github.com/rajaraodv/rabbitpubsub/raw/master/pics/chatAppPage2.png" height="" width="450px" />
 </p>
 
@@ -36,7 +36,7 @@ The main objective of this project is to build a simple chat app and tackle such
 ***Along the way, we will go over:***
 
 1. How to use Socket.io & Sticky Sessions.
-2. How to use Redis as session store 
+2. How to use Redis as session store
 3. How to use Redis as a pubsub service.
 4. How to use sessions.sockets.io to get session info (like user info) from Express sessions.
 5. How to configure Socket.io client & server to properly reconnect after one or more server instances goes down ( i.e. has been restarted / scaled down / has crashed).
@@ -51,7 +51,7 @@ But when you run such a server in the cloud that has load-balancer/ reverse prox
 
 One of the constraints Socket.io and SockJS etc. have is that they need to continuously talk to the <i><b>same instance</b></i> of the server. They work perfectly fine when there is only 1 instance of the server.
 
-<p>
+<p align='center'>
 <img src="https://github.com/rajaraodv/rabbitpubsub/raw/master/pics/socketio1Instance.png" height="300px" width="450px" />
 </p>
 
@@ -60,7 +60,7 @@ One of the constraints Socket.io and SockJS etc. have is that they need to conti
 <br>
 <br>
 But when you scale your app in a cloud environment, the load balancer will take over and starts to send the requests are sent to different instances causing Socket.io to break.
-<p>
+<p align='center'>
 <img src="https://github.com/rajaraodv/rabbitpubsub/raw/master/pics/socketioBreaks.png" height="300px" width="450px" />
 </p>
 
@@ -85,16 +85,16 @@ So all the apps need to do is to set a cookie w/ name <b>jsessionid</b> to make 
     app.use(express.session({store:sessionStore, key:'jsessionid', secret:'your secret here'}));
 ```
 
-<p>
+<p align='center'>
 <img src="https://github.com/rajaraodv/rabbitpubsub/raw/master/pics/socketioWorks.png" height="300px" width="450px" />
 </p>
-In the above diagram, when you open the app, 
+In the above diagram, when you open the app,
 
-1. Express sets a session cookie w/ cookie name <b>jsessionid</b>. 
+1. Express sets a session cookie w/ cookie name <b>jsessionid</b>.
 2. Then when socket.io connects, it uses that same cookie & hits load balancer
 3. Load balancer always routes it to the same server that the cookie was set in.
 
-## Sending session info to Socket.io 
+## Sending session info to Socket.io
 Let's imagine that the user is logging in via Twitter or Facebook or we have regular login screen. And we are storing this information in a session after the user has logged in.
 
 ```javascript
@@ -131,25 +131,25 @@ sessionSockets.on('connection', function (err, socket, session) {
 
   //get info from session
   var user = session.user;
-  
+
   //Close socket if user is not logged in
-  if(!user) 
-  	socket.close(); 
-   
+  if(!user)
+  	socket.close();
+
   //do pubsub
   socket.emit('chat', {user: user, msg: 'logged in'});
   ...
 });
 ```
 
-<p>
+<p align='center'>
 <img src="https://github.com/rajaraodv/rabbitpubsub/raw/master/pics/sendingSession2SocketIO.png" height="300px" width="450px" />
 </p>
 
 
 ## Redis as a session store
 
-So far so good, but all these sesssion information is stored in Socket.io's Memory store. i.e. in-memory. So if one of the instances goes down, it will be lost. 
+So far so good, but all these sesssion information is stored in Socket.io's Memory store. i.e. in-memory. So if one of the instances goes down, it will be lost.
 
 So we will configure our app to use Redis as session store like below.
 
@@ -161,29 +161,29 @@ var redis = require('redis');
 var RedisStore = require('connect-redis')(express);
 var rClient = redis.createClient();
 var sessionStore = new RedisStore({client:rClient});
-    
-    
+
+
   //And pass sessionStore to Express's 'session' middleware's 'store' value.
      ...
-     ...  
-    app.use(express.session({store:sessionStore, key:'jsessionid', secret:'your secret here'})); 
+     ...
+    app.use(express.session({store:sessionStore, key:'jsessionid', secret:'your secret here'}));
      ...
 
 ```
 
-<p>
+<p align='center'>
 <img src="https://github.com/rajaraodv/rabbitpubsub/raw/master/pics/redisAsSessionStore.png" height="300px" width="450px" />
 </p>
 
 
 With the above configuration, sessions will now be stored in Redis. And also, if one of the server instances goes down, session will still be available for other instances to pick up.
-    
+
 <br>
 ##RabbitMQ as pub-sub server
 So far with the above setup our sessions are taken care of but if we are using Socket.io's default pub-sub, it will work only for 1 sever instance.
 i.e. if user1 & user2 are on server instance #1, they both can chat with each other. But if they are on different server instances they can't.
 
-So we will update our server to use Redis as PubSub service (along with session-store). PS: Redis natively supports pub-sub operations. All we need to do is to create a publisher, a subscriber & a channel and we will be good. 
+So we will update our server to use Redis as PubSub service (along with session-store). PS: Redis natively supports pub-sub operations. All we need to do is to create a publisher, a subscriber & a channel and we will be good.
 
 ```javascript
 //instead of using socket.io's default pub-sub..
@@ -220,7 +220,7 @@ sessionSockets.on('connection', function (err, socket, session) {
    socket.on('join', function(data){
         pub.publish('chat', {msg: 'user joined'});
   });
-  
+
    /*
      Use Redis' 'sub' (subscriber) client to listen to any message from Redis to server.
      When a message arrives, send it back to browser using socket.io
@@ -234,7 +234,7 @@ sessionSockets.on('connection', function (err, socket, session) {
 
 
 So the app's architecture will now look like this:
-<p>
+<p align='center'>
 <img src="https://github.com/rajaraodv/rabbitpubsub/raw/master/pics/finalArchitecture.png" height="" width="450px" />
 </p>
 <br>
@@ -284,14 +284,14 @@ The below code simply connects a browser to server and listens to various Socket
 <br>
 While the user is chatting, if we restart the app **on localhost or single host**, Socket.io attempts to reconnect multiple times (configuration) to see if it can connect. If the server comes up w/in that time, it will reconnect. So we see the below logs:
 
-<p>
+<p align='center'>
 <img src="https://github.com/rajaraodv/rabbitpubsub/raw/master/pics/reconnectOn1server.png" height="300px" width="600px" />
 </p>
 
 <br>
 But, if the user is chatting on the same app that's running ***on Cloud Foundry AND with multiple instances***, and if we restart the server (say using `vmc restart rabbitpubsub`)
 then we'll see the following log:
-<p>
+<p align='center'>
 <img src="https://github.com/rajaraodv/rabbitpubsub/raw/master/pics/reconnectOnMultiServer.png" height="400px" width="600px" />
 </p>
 
