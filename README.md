@@ -188,10 +188,10 @@ So we will update our server to use RabbitMQ as PubSub service.
 But if you are completely new to RabbitMQ, here are some of the basics. ***click on the pics to see them in full size***
 
 <p align="center">
-<span style='align:left'> <img src="https://github.com/rajaraodv/rabbitpubsub/raw/master/pics/rabbitmqBasics1.png" height="250px" width="300px" /></span><span style='align:left'> 
-<img src="https://github.com/rajaraodv/rabbitpubsub/raw/master/pics/rabbitmqBasics2.png" height="250px" width="300px" /></span>
+<span style='align:left'> <img src="https://github.com/rajaraodv/rabbitpubsub/raw/master/pics/rabbitmqBasics1.png" height="250px" width="250px" /></span><span style='align:left'> 
+<img src="https://github.com/rajaraodv/rabbitpubsub/raw/master/pics/rabbitmqBasics2.png" height="250px" width="250px" /></span>
 <span style='align:left'> 
-<img src="https://github.com/rajaraodv/rabbitpubsub/raw/master/pics/rabbitmqBasics3.png" height="250px" width="300px" /></span>
+<img src="https://github.com/rajaraodv/rabbitpubsub/raw/master/pics/rabbitmqBasics3.png" height="250px" width="250px" /></span>
 </p>
 
 To learn more about RabbitMQ, please visit: <a href='http://www.rabbitmq.com' target='_blank'>RabbitMQ</a>
