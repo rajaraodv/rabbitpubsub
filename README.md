@@ -17,18 +17,18 @@ The main objective of this project is to build a simple chat app and tackle such
 
 ***Final architecture:***
 
-<p align='center'>
+<p>
 <img src="https://github.com/rajaraodv/rabbitpubsub/raw/master/pics/finalArchitecture.png" height="" width="450px" />
 </p>
 
 ***Login page:***
 
-<p align='center'>
+<p>
 <img src="https://github.com/rajaraodv/rabbitpubsub/raw/master/pics/chatAppPage1.png" height="" width="450px" />
 </p>
 
 ***Chat page:***
-<p align='center'>
+<p>
 <img src="https://github.com/rajaraodv/rabbitpubsub/raw/master/pics/chatAppPage2.png" height="" width="450px" />
 </p>
 
@@ -49,9 +49,9 @@ The main objective of this project is to build a simple chat app and tackle such
 
 But when you run such a server in the cloud that has load-balancer/ reverse proxy, routers etc, you need to configure it work properly especially when you scale the server to use multiple instances.
 
-One of the constraints Socket.io and SockJS etc. have is that they need to continiously talk to the <i><b>same instance</b></i> of the server. They work perfectly fine when there is only 1 instance of the server.
+One of the constraints Socket.io and SockJS etc. have is that they need to continuously talk to the <i><b>same instance</b></i> of the server. They work perfectly fine when there is only 1 instance of the server.
 
-<p align='center'>
+<p>
 <img src="https://github.com/rajaraodv/rabbitpubsub/raw/master/pics/socketio1Instance.png" height="300px" width="450px" />
 </p>
 
@@ -60,7 +60,7 @@ One of the constraints Socket.io and SockJS etc. have is that they need to conti
 <br>
 <br>
 But when you scale your app in a cloud environment, the load balancer will take over and starts to send the requests are sent to different instances causing Socket.io to break.
-<p align='center'>
+<p>
 <img src="https://github.com/rajaraodv/rabbitpubsub/raw/master/pics/socketioBreaks.png" height="300px" width="450px" />
 </p>
 
@@ -85,7 +85,7 @@ So all the apps need to do is to set a cookie w/ name <b>jsessionid</b> to make 
     app.use(express.session({store:sessionStore, key:'jsessionid', secret:'your secret here'}));
 ```
 
-<p align='center'>
+<p>
 <img src="https://github.com/rajaraodv/rabbitpubsub/raw/master/pics/socketioWorks.png" height="300px" width="450px" />
 </p>
 In the above diagram, when you open the app, 
@@ -142,7 +142,7 @@ sessionSockets.on('connection', function (err, socket, session) {
 });
 ```
 
-<p align='center'>
+<p>
 <img src="https://github.com/rajaraodv/rabbitpubsub/raw/master/pics/sendingSession2SocketIO.png" height="300px" width="450px" />
 </p>
 
@@ -171,7 +171,7 @@ var sessionStore = new RedisStore({client:rClient});
 
 ```
 
-<p align='center'>
+<p>
 <img src="https://github.com/rajaraodv/rabbitpubsub/raw/master/pics/redisAsSessionStore.png" height="300px" width="450px" />
 </p>
 
@@ -234,8 +234,8 @@ sessionSockets.on('connection', function (err, socket, session) {
 
 
 So the app's architecture will now look like this:
-<p align='center'>
-<img src="https://github.com/rajaraodv/rabbitpubsub/raw/master/pics/redisAsSSAndPS.png" height="300px" width="500px" />
+<p>
+<img src="https://github.com/rajaraodv/rabbitpubsub/raw/master/pics/finalArchitecture.png" height="" width="450px" />
 </p>
 <br>
 <br>
@@ -284,14 +284,14 @@ The below code simply connects a browser to server and listens to various Socket
 <br>
 While the user is chatting, if we restart the app **on localhost or single host**, Socket.io attempts to reconnect multiple times (configuration) to see if it can connect. If the server comes up w/in that time, it will reconnect. So we see the below logs:
 
-<p align='center'>
+<p>
 <img src="https://github.com/rajaraodv/rabbitpubsub/raw/master/pics/reconnectOn1server.png" height="300px" width="600px" />
 </p>
 
 <br>
 But, if the user is chatting on the same app that's running ***on Cloud Foundry AND with multiple instances***, and if we restart the server (say using `vmc restart rabbitpubsub`)
 then we'll see the following log:
-<p align='center'>
+<p>
 <img src="https://github.com/rajaraodv/rabbitpubsub/raw/master/pics/reconnectOnMultiServer.png" height="400px" width="600px" />
 </p>
 
