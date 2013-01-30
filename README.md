@@ -1,410 +1,220 @@
+In the previous blog [Scaling Real-time Apps on Cloud Foundry Using Node.js and Redis](http://blog.cloudfoundry.com/2013/01/24/scaling-real-time-apps-on-cloud-foundry-using-node-js-and-redis/), we used Redis as Session Store and also as a pub-sub service for chat messages. But in many enterprise grade real-time apps, you may want to use RabbitMQ instead of Redis to do pub-sub. This is especially true for financial or Bank apps like Stock Quote apps where it is critical to *protect* and deliver each-and-every message AND do it as quickly as possible.
 
+So, in this blog, we will start from [Scaling Real-time Apps on Cloud Foundry Using Node.js and Redis](http://blog.cloudfoundry.com/2013/01/24/scaling-real-time-apps-on-cloud-foundry-using-node-js-and-redis/) and simply replace Redis with RabbitMQ pubsub.
 
-#Scaling real-time apps on Cloud Foundry (using Redis + RabbitMQ)#
-<br>
-
-## Chat App ##
-One of the most common things people build on Node.js are real-time apps like chat apps, social-networking apps etc. And there are plenty of examples showing how to build such apps on the web. But it's hard to find an example that shows how to deal with real-time apps that are scaled & are running in the cloud/PaaS with multiple instances & deal with issues like app sessions, sticky sessions, scale-up/down, instance crash/restart etc in such an environment.
- 
-The main objective of this project is to build a simple chat app and tackle such issues. Specifically, we will be building a simple Express (server), Socket.io(browser<->server), Redis(session store) & RabbitMQ(pub-sub) based Chat app that should meet the following objectives:
-
-1. Chat server should run on multiple instance.
-2. User's login should be saved in a session.
-    * If the user refreshes the browser, he should be relogged in.
-    * Socket.io should get user info from the session before sending chat-message 
-   * Socket.io should only connect if user is already logged in.
-3. While the user is chatting, if the server to which he is connected is restarted / scaled-down, the user should be reconnected to available instance w/o bouncing him. 
-
-***Final architecture:***
+The app architecture (before):
 
 <p align='center'>
-<img src="https://github.com/rajaraodv/rabbitpubsub/raw/master/pics/finalArchitecture.png" height="" width="450px" />
-</p>
-
-***Login page:***
-
-<p align='center'>
-<img src="https://github.com/rajaraodv/rabbitpubsub/raw/master/pics/chatAppPage1.png" height="" width="450px" />
-</p>
-
-***Chat page:***
-<p align='center'>
-<img src="https://github.com/rajaraodv/rabbitpubsub/raw/master/pics/chatAppPage2.png" height="" width="450px" />
-</p>
-
-<br>
-***Along the way, we will go over:***
-
-1. How to use Socket.io & Sticky Sessions.
-2. How to use Redis as session store
-3. How to use Redis as a pubsub service.
-4. How to use sessions.sockets.io to get session info (like user info) from Express sessions.
-5. How to configure Socket.io client & server to properly reconnect after one or more server instances goes down ( i.e. has been restarted / scaled down / has crashed).
-
-
-
-## Socket.io & Sticky Sessions ##
-
-<a href='http://socket.io/' target='_blank'>Socket.io</a> is one of the earliest & most popular Node.js modules to help build real-time apps like chat, social networking etc. in Node.js.  (PS: <a href='https://github.com/sockjs/sockjs-client' target='_blank'>SockJS</a> is another popular library similar to Socket.io).
-
-But when you run such a server in the cloud that has load-balancer/ reverse proxy, routers etc, you need to configure it work properly especially when you scale the server to use multiple instances.
-
-One of the constraints Socket.io and SockJS etc. have is that they need to continuously talk to the <i><b>same instance</b></i> of the server. They work perfectly fine when there is only 1 instance of the server.
-
-<p align='center'>
-<img src="https://github.com/rajaraodv/rabbitpubsub/raw/master/pics/socketio1Instance.png" height="300px" width="450px" />
+  <img src="https://github.com/rajaraodv/redispubsub/raw/master/pics/redisAsSSAndPS.png" height="300px" width="500px" />
 </p>
 
 
-<br>
-<br>
-<br>
-But when you scale your app in a cloud environment, the load balancer will take over and starts to send the requests are sent to different instances causing Socket.io to break.
-<p align='center'>
-<img src="https://github.com/rajaraodv/rabbitpubsub/raw/master/pics/socketioBreaks.png" height="300px" width="450px" />
-</p>
 
-<br>
-<br>
-<br>
-To help in such situations, load balancers have feature called 'sticky sessions' aka 'session affinity'. The main idea is that if its set, then after the first request(load-balanced request), all the following requests will go to the same server instance.
-
-In Cloud Foundry, cookie based sticky sessions are enabled for apps that sets cookie <b>jsessionid</b>.
-
-So all the apps need to do is to set a cookie w/ name <b>jsessionid</b> to make Socket.io work.
-
-```
-    /*
-     Use cookieParser and session middlewares together.
-     By default Express/Connect app creates a cookie by name 'connect.sid'.But to scale Socket.io app,
-     make sure to use cookie name 'jsessionid' (instead of connect.sid) use Cloud Foundry's 'Sticky Session' feature.
-     W/o this, Socket.io won't work if you have more than 1 instance.
-     If you are NOT running on Cloud Foundry, having cookie name 'jsessionid' doesn't hurt - it's just a cookie name.
-     */
-    app.use(cookieParser);
-    app.use(express.session({store:sessionStore, key:'jsessionid', secret:'your secret here'}));
-```
+The app architecture w/ RabbitMQ (after):
 
 <p align='center'>
-<img src="https://github.com/rajaraodv/rabbitpubsub/raw/master/pics/socketioWorks.png" height="300px" width="450px" />
-</p>
-In the above diagram, when you open the app,
-
-1. Express sets a session cookie w/ cookie name <b>jsessionid</b>.
-2. Then when socket.io connects, it uses that same cookie & hits load balancer
-3. Load balancer always routes it to the same server that the cookie was set in.
-
-## Sending session info to Socket.io
-Let's imagine that the user is logging in via Twitter or Facebook or we have regular login screen. And we are storing this information in a session after the user has logged in.
-
-```javascript
-
-app.post('/login', function(req, res) {
-   //store user info in session after login.
-  req.session.user = req.body.user;
-  ...
-  ...
-});
-```
-
-And once the user has logged in, we connect to Socket.io to allow chatting. But socket.io doesn't know who the user is & he is actually logged in before sending chat messages to others.
-
-That's where `sessions.sockets.io` library comes in. It's a very simple library, all it does is to grab session information during handshake & gives it to Socket.io's `connection` function.
-
-```javascript
-//instead of
-io.sockets.on('connection', function(socket) {
- //do pubsub here
- ...
-})
-
-// with sessions.sockets.io, you'll get session info
-
-/*
- Use SessionSockets so that we can exchange (set/get) user data b/w sockets and http sessions
- Pass 'jsessionid' (custom) cookie name that we are using to make use of Sticky sessions.
- */
-var SessionSockets = require('session.socket.io');
-var sessionSockets = new SessionSockets(io, sessionStore, cookieParser, 'jsessionid');
-
-sessionSockets.on('connection', function (err, socket, session) {
-
-  //get info from session
-  var user = session.user;
-
-  //Close socket if user is not logged in
-  if(!user)
-  	socket.close();
-
-  //do pubsub
-  socket.emit('chat', {user: user, msg: 'logged in'});
-  ...
-});
-```
-
-<p align='center'>
-<img src="https://github.com/rajaraodv/rabbitpubsub/raw/master/pics/sendingSession2SocketIO.png" height="300px" width="450px" />
+  <img src="https://raw.github.com/rajaraodv/rabbitpubsub/master/pics/finalArchitecture.png" height="300px" width="500px" />
 </p>
 
 
-## Redis as a session store
+***
+## Intro to RabbitMQ
+Node.js community may not be familiar with RabbitMQ. So here are some of the high-level intro of RabbitMQ.
 
-So far so good, but all these sesssion information is stored in Socket.io's Memory store. i.e. in-memory. So if one of the instances goes down, it will be lost.
+RabbitMQ is a message broker. It simply accepts message from one or more producers and sends it to one or more consumers.
 
-So we will configure our app to use Redis as session store like below.
+RabbitMQ is more sophisticated and flexible than just that. Depending on the configuration, it can also figure out what needs to be done when a consumer crashes(store and re-deliver message), when consumer is slow (queue messages), when there are multiple consumers (distribute work load), or even when RabbitMQ itself crashes (durable). For more please see: [RabbitMQ tutorials](http://www.rabbitmq.com/tutorials/tutorial-one-python.html).
 
-```javascript
-/*
- Use Redis for Session Store. Redis will keep all Express sessions in it.
- */
-var redis = require('redis');
-var RedisStore = require('connect-redis')(express);
-var rClient = redis.createClient();
-var sessionStore = new RedisStore({client:rClient});
+RabbitMQ is also very fast. It implements AMQP protocol [built by and for Wall Street firms like J.P. Morgan Chase, Goldman Sachs etc](http://en.wikipedia.org/wiki/Advanced_Message_Queuing_Protocol#History) for trading stocks and related activities. RabbitMQ is an Erlang (also well-known for concurrency & speed) implementation of that protocol.
 
 
-  //And pass sessionStore to Express's 'session' middleware's 'store' value.
-     ...
-     ...
-    app.use(express.session({store:sessionStore, key:'jsessionid', secret:'your secret here'}));
-     ...
+For more please go through [RabbitMQ's website](http://www.rabbitmq.com).
 
-```
-
-<p align='center'>
-<img src="https://github.com/rajaraodv/rabbitpubsub/raw/master/pics/redisAsSessionStore.png" height="300px" width="450px" />
-</p>
-
-
-With the above configuration, sessions will now be stored in Redis. And also, if one of the server instances goes down, session will still be available for other instances to pick up.
-
-<br>
-##RabbitMQ as pub-sub server
-So far with the above setup our sessions are taken care of but if we are using Socket.io's default pub-sub, it will work only for 1 sever instance.
-i.e. if user1 & user2 are on server instance #1, they both can chat with each other. But if they are on different server instances they can't.
-
-So we will update our server to use RabbitMQ as PubSub service using <a href='https://github.com/postwait/node-amqp' target='_blank'>node-amqp</a> module.  But if you are completely new to RabbitMQ, here are some of the basics. ***(Please click on the pics to zoom)***
-
+***
+## RabbitMQ Basics
 <p align="center">
-<span style='align:left'> <img src="https://github.com/rajaraodv/rabbitpubsub/raw/master/pics/rabbitmqBasics1.png" height="250px" width="250px" /></span><span style='align:left'> 
-<img src="https://github.com/rajaraodv/rabbitpubsub/raw/master/pics/rabbitmqBasics2.png" height="250px" width="250px" /></span>
-<span style='align:left'> 
-<img src="https://github.com/rajaraodv/rabbitpubsub/raw/master/pics/rabbitmqBasics3.png" height="250px" width="250px" /></span>
+<img src="https://raw.github.com/rajaraodv/rabbitpubsub/master/pics/rabbitmq.png" />
 </p>
 
-***To learn more about RabbitMQ, please visit: <a href='http://www.rabbitmq.com' target='_blank'>http://www.rabbitmq.com</a> ***
+RabbitMQ has 4 pieces.
+
+1. Producer ("P") - Sends messages to an exhange along with "Routing key" indicating how to route the message.
+2. Exchange ("X") - Recieves message and Routing key from Producers and figures out what to do with the message.
+3. Queues("Q") - A temporary place where the messages are stored based on Queue's "binding key" until a consumer is ready to recieve the message. Note: While a Queue physically resides inside RabbitMQ, A consumer is the one that actually creates it by providing a "Binding Key".
+4. Consumer("C") - Subscribes to a Queue to recieve messages.
+
+***
+## Routing Key, Binding Key and types of Exchanges
 
 
-OK, to add RabbitMQ, first we will create an exchange called `chatExchange` of type `fanout`. This means any message that comes to this exchange (from producers) are sent to ALL consumers.
+To allow various work-flows like pub-sub, work queues, topics, RPC etc., RabbitMQ allows us to independently configure the type of the Exchange, Routing Key and Binding Key.
 
-```javascript
+<p align='center'>
+  <img src="https://github.com/rajaraodv/rabbitpubsub/raw/master/pics/rabbitmq_workFlows.png" height="300px" width="500px" />
+</p>
+
+#### Routing Key:
+A string/constraint from Producer instructing Exchange how to route the message. A Routing key looks like: "logs", "errors.logs", "warnings.logs" "tweets" etc.
+
+#### Binding Key:
+
+Another string/constraint added by a Consumer to a queue to which it is binding/listening to. A Binding key looks like: "logs", "*.logs", "#.logs" etc.
+
+Note: In RabbitMQ, Binding keys can have "patterns" (but not Routing keys).
+
+#### Types of Exchange:
+
+Exchanges can be of 4 types:
+
+1. Direct - Sends messages from producer to consumer if Routing Key and Binding key match exactly.
+2. Fanout - Sends any message from a producer to ALL consumers (i.e ignores both routing key & binding key)
+3. Topic - Sends a message from producer to consumer based on pattern-matching.
+4. Headers - If more complicated routing is required beyond simple Routing key string, you can use headers exchange.
+
+
+
+So as you can see the combination of `the type of Exchange`, `Routing Key` and `Binding Key` makes RabbitMQ behaves completely differently. For example: A `Fanout` Exchange ignores `Routing Key` and `Binding Key` and sends messages to all consumers. A `Topic` Exchange sends a copy of a message to zero, one or more consumers.
+
+Going into more details is beyond the scope of this blog, but here is another good blog that goes into more details: [AMQP 0-9-1 Model Explained](http://www.rabbitmq.com/tutorials/amqp-concepts.html)
+
+***
+## Using RabbitMQ to do pub-sub in our Node.js chat app.
+Now that we know some of the basics of RabbitMQ, and all the 4 pieces, let's see how to actually use RabbitMQ for our Chat app.
+
+### Chat App:
+<p align='center'>
+  <img src="https://github.com/rajaraodv/rabbitpubsub/raw/master/pics/chatAppPage2.png" height="300px" width="500px" />
+</p>
+
+### Connecting to RabbitMQ and creating an Exchange
+For our chat application, we will create a `fanout` exchange called `chatExchange`. And will be using [node-amqp module](https://github.com/postwait/node-amqp) to talk to RabbitMQ service.
+
+<pre>
+//Connect to RabbitMQ and get reference to the connection.
 var rabbitConn = amqp.createConnection({});
+
+//Create an exchange with a name 'chatExchange' and of type 'fanout'
 var chatExchange;
 rabbitConn.on('ready', function () {
-    chatExchange = rabbitConn.exchange('chatExchange', {'type':'fanout'});
+    chatExchange = rabbitConn.exchange('chatExchange', {'type': 'fanout'});
 });
-```
+</pre>
 
-And when the browser connects via Socket.io, we will publish chat messages and join-notifications via `chatExchange.publish(..)`. And we will then create a  queue `rabbitConn.queue (…)`, bind that queue to listen to all messages ` q.bind('chatExchange', "#");` and finally create a subscriber callback function `q.subscribe(function (message) {…} )` to which all the messages are sent.
+### Creating Producers (So Users can send chat messages)
+In our chat app, users are both producers(i.e. sends chat messages to others) and also consumers (i.e. recieves messages from others). Let's focus on users being 'producers'.
 
-```javascript
+When a user sends a chat message, publish it to chatExchange w/o a Routing Key (Routing Key doesn't matter because chatExchange is a 'fanout').
 
-sessionSockets.on('connection', function (err, socket, session) {
-    /*
-     When a user sends a chat message, publish it to chatExchange w/o binding key (bindingKey doesn't matter
-     because chatExchange is fanout).
-     Notice that we are getting user's name from session.
+<pre>
+    /**
+     * When a user sends a chat message, publish it to chatExchange w/o a Routing Key (Routing Key doesn't matter
+     * because chatExchange is a 'fanout').
+     *
+     * Notice that we are getting user's name from session.
      */
     socket.on('chat', function (data) {
         var msg = JSON.parse(data);
-        var reply = {action:'message', user:session.user, msg:msg.msg };
-        // pub.publish('chat', reply);
+        var reply = {action: 'message', user: session.user, msg: msg.msg };
         chatExchange.publish('', reply);
     });
+</pre>
 
-    /*
-     When a user joins, publish it to chatExchange w/o binding key (bindingKey doesn't matter
-     because chatExchange is fanout).
-     Notice that we are getting user's name from session.
+Similarly, when a user joins, publish it to chatExchange w/o Routing key.
+<pre>
+   /**
+     * When a user joins, publish it to chatExchange w/o Routing key (Routing doesn't matter
+     * because chatExchange is a 'fanout').
+     *
+     * Note: that we are getting user's name from session.
      */
     socket.on('join', function () {
-        var reply = {action:'control', user:session.user, msg:' joined the channel' };
+        var reply = {action: 'control', user: session.user, msg: ' joined the channel' };
+        chatExchange.publish('', reply);
+    });
+</pre>
+
+### Creating Consumers (So Users can receive chat messages)
+Creating consumers involves 3 steps:
+
+1. Create a queue with some options.
+2. Bind queue to exchange using some "Binding Key"
+3. Create a subscriber (usually a callback function) to actually obtain messages sent to the queue.
+
+For our chat app,
+
+1. Let's create a queue w/o any name. This forces RabbitMQ to create new queue for every socket.io connection w/ a new random queue name. Let's also set `exclusive` flag to ensure only one connection exists.
+<pre>
+ rabbitConn.queue('', {exclusive: true}, function (q) {
+ ..
+ }
+</pre>
+
+2. Then bind the queue to chatExchange  w/ "#" or "" 'Binding key' and listen to ALL messages.
+<pre>
+ q.bind('chatExchange', "");
+</pre>
+3. Lastly, create a consumer (via q.subscribe) that waits for messages from RabbitMQ. And when a message comes, send it to the browser.
+<pre>
+ q.subscribe(function (message) {
+   //When a message comes, send it back to browser
+   socket.emit('chat', JSON.stringify(message));
+ });
+</pre>
+
+Putting it all togeather.
+<pre>
+sessionSockets.on('connection', function (err, socket, session) {
+    /**
+     * When a user sends a chat message, publish it to chatExchange w/o a Routing Key (Routing Key doesn't matter
+     * because chatExchange is a 'fanout').
+     *
+     * Notice that we are getting user's name from session.
+     */
+    socket.on('chat', function (data) {
+        var msg = JSON.parse(data);
+        var reply = {action: 'message', user: session.user, msg: msg.msg };
+        chatExchange.publish('', reply);
+    });
+
+   /**
+     * When a user joins, publish it to chatExchange w/o Routing key (Routing doesn't matter
+     * because chatExchange is a 'fanout').
+     *
+     * Note: that we are getting user's name from session.
+     */
+    socket.on('join', function () {
+        var reply = {action: 'control', user: session.user, msg: ' joined the channel' };
         chatExchange.publish('', reply);
     });
 
 
-    /*Initialize subscriber queue.
-     First create a queue w/o any name. This forces RabbitMQ to create new queue
-     for every socket.io connection w/ a new random queue name.
-     Then bind the queue to chatExchange and listen to ALL messages
-     Lastly, create a consumer (via .subscribe) that waits for messages from RabbitMQ. And when
-     a message comes, send it to the browser.
+   /**
+     * Initialize subscriber queue.
+     * 1. First create a queue w/o any name. This forces RabbitMQ to create new queue for every socket.io connection w/ a new random queue name.
+     * 2. Then bind the queue to chatExchange  w/ "#" or "" 'Binding key' and listen to ALL messages
+     * 3. Lastly, create a consumer (via .subscribe) that waits for messages from RabbitMQ. And when
+     * a message comes, send it to the browser.
+     *
+     * Note: we are creating this w/in sessionSockets.on('connection'..) to create NEW queue for every connection
+   */
+    rabbitConn.queue('', {exclusive: true}, function (q) {
+        //Bind to chatExchange w/ "#" or "" binding key to listen to all messages.
+        q.bind('chatExchange', "");
 
-     Notice that we are creating this w/in sessionSockets.on('connection' to create NEW queue for every connection
-     */
-    rabbitConn.queue('', {exclusive:true}, function (q) {
-        q.bind('chatExchange', "#"); // bind to chat ALL channel/bindingKey
+   //Subscribe When a message comes, send it back to browser
         q.subscribe(function (message) {
             socket.emit('chat', JSON.stringify(message));
         });
     });
-});
-```
-
-
-So the app's architecture will now look like this:
-<p align='center'>
-<img src="https://github.com/rajaraodv/rabbitpubsub/raw/master/pics/finalArchitecture.png" height="" width="450px" />
-</p>
-<br>
-<br>
-## Handling server scale-down / crashing / restarting
-In theory, our app will work fine as long as all the server instances are running. But what happens if the server is restarted or scaled down or one of the instances crash? How do we handle that?
-
-But let's first understand what happens in that situation.
-
-The below code simply connects a browser to server and listens to various Socket.io's events.
-
-```javascript
-    /*
-         Connect to socket.io on the server (***BEFORE FIX***).
-         */
-        var host = window.location.host.split(':')[0];
-        var socket = io.connect('http://' + host);
-
-        socket.on('connect', function () {
-            console.log('connected');
-        });
-        socket.on('connecting', function () {
-            console.log('connecting');
-        });
-        socket.on('disconnect', function () {
-            console.log('disconnect');
-        });
-        socket.on('connect_failed', function () {
-            console.log('connect_failed');
-        });
-        socket.on('error', function (err) {
-            console.log('error: ' + err);
-        });
-        socket.on('reconnect_failed', function () {
-            console.log('reconnect_failed');
-        });
-        socket.on('reconnect', function () {
-            console.log('reconnected ');
-        });
-        socket.on('reconnecting', function () {
-            console.log('reconnecting');
-        });
-
-
-```
-<br>
-<br>
-While the user is chatting, if we restart the app **on localhost or single host**, Socket.io attempts to reconnect multiple times (configuration) to see if it can connect. If the server comes up w/in that time, it will reconnect. So we see the below logs:
-
-<p align='center'>
-<img src="https://github.com/rajaraodv/rabbitpubsub/raw/master/pics/reconnectOn1server.png" height="300px" width="600px" />
-</p>
-
-<br>
-But, if the user is chatting on the same app that's running ***on Cloud Foundry AND with multiple instances***, and if we restart the server (say using `vmc restart rabbitpubsub`)
-then we'll see the following log:
-<p align='center'>
-<img src="https://github.com/rajaraodv/rabbitpubsub/raw/master/pics/reconnectOnMultiServer.png" height="400px" width="600px" />
-</p>
-
-You can see that in the above logs, after the server comes back up, Socket.io -client(that's running in the browser) isn't able to connect to Socket.io-server(that's running in the server). 
-
-That is because, once the server is restarted on Cloud Foundry, ***instances are brought up as if they are brand-new server instances w/ different IP addresses and different ports and so `jsessionid` in no-longer valid***  
-And that in-turn causes Socket.io's reconnection requests to be ***load balanced*** (i.e. they are sent to different server instances) causing socket.io-server piece not to properly handshake and consequently to throw `client not handshaken` error!
-
-<br>
-###OK, let's fix that reconnection issue.
-
-First, we will disable Socket.io's default "reconnect" feature. And then implement our own reconnection feature. 
-
-In our custom reconnection function, When the server goes down, we'll make a dummy HTTP-get call to index.html every 4-5 seconds.
-	      And if the call succeeds, we know that (Express) server has already set ***jsessionid*** in the response. So then we'll call socket.io's reconnect function. And this time because jsessionid is set, socket.io's handshake will succeed and the user will get to continue chatting happily.
-	      
-```javascript
-
-    /*
-      Connect to socket.io on the server (*** FIX ***).
-    */
- 	var host = window.location.host.split(':')[0];
- 	
- 		//Disable Socket.io's default "reconnect" feature
-        var socket = io.connect('http://' + host, {reconnect:false, 'try multiple transports':false});
-        var intervalID;
-        var reconnectCount = 0;
-		...
-		...
-        socket.on('disconnect', function () {
-            console.log('disconnect');
-            
-            //Retry reconnecting every 4 seconds
-            intervalID = setInterval(tryReconnect, 4000);
-        });
-       ...
-       ...
-      
-        
-
-	    /*
-	      Implement our own reconnection feature. 
-	      When the server goes down we make a dummy HTTP-get call to index.html every 4-5 seconds.
-	      If the call succeeds, we know that (Express) server sets ***jsessionid*** , so only then we try socket.io reconnect.
-	    */
-        var tryReconnect = function () {
-            ++reconnectCount;
-            if (reconnectCount == 5) {
-                clearInterval(intervalID);
-            }
-            console.log('Making a dummy http call to set jsessionid (before we do socket.io reconnect)');
-            $.ajax('/')
-                .success(function () {
-                    console.log("http request succeeded");
-                    //reconnect the socket AFTER we got jsessionid set
-                    socket.socket.reconnect();
-                    clearInterval(intervalID);
-                }).error(function (err) {
-                    console.log("http request failed (probably server not up yet)");
-                });
-        };
-        
-```
-
-
-In addition, on the server, when the dummy-http request comes in, we will ***regenerate*** session to remove old session & sessionid and ensure everything is afresh before we serve the response.
-
-```javascript
-//Instead of..
-exports.index = function (req, res) {
-    res.render('index', { title:'rabbitpubsubApp',  user:req.session.user});
-};
-
-//Use this..
-exports.index = function (req, res) {
-    //Save user from previous session (if it exists)
-    var user = req.session.user;
-    
-    //Regenerate new session & store user from previous session (if it exists)
-    req.session.regenerate(function (err) {
-        req.session.user = user;
-        res.render('index', { title:'rabbitpubsubApp',  user:req.session.user});
-    });
-};
-
-
-```
+ });
+</pre>
 
 ## Running / Testing it on Cloud Foundry ##
 * Clone this app to `rabbitpubsub` folder
 * ` cd rabbitpubsub`
 * `npm install` & follow the below instructions to push the app to Cloud Foundry
 
-```
+<pre>
 
 [~/success/git/rabbitpubsub]
 > vmc push rabbitpubsub
@@ -476,7 +286,8 @@ Uploading rabbitpubsub... OK
 Starting rabbitpubsub... OK
 Checking rabbitpubsub... OK
 
-```
+</pre>
+
 * Once the server is up,o open up multiple browsers and go do `<servername>.cloudfoundry.com`
 * Start chatting.
 
@@ -493,16 +304,15 @@ Checking rabbitpubsub... OK
 * Once the server restarts, Socket.io should automatically reconnect
 * You should be able to chat after the reconnection.
 
+That's it for now. Hopefully this blog helps you get started with using RabbitMQ. Look forward for more Node.j and RabbitMQ related blogs.
 
 
-## General Notes ####
-* If you don't have Node.js, download it from <a href='http://nodejs.org' target='_blank'>here</a>
-* If you don't have a Cloud Foundry account, sign up for it <a href='https://my.cloudfoundry.com/signup' target='_blank'>here</a>  
-* Check out Cloud Foundry getting started <a href='http://docs.cloudfoundry.com/getting-started.html' target='_blank'>here</a> & install `vmc` Ruby command line tool to push apps.
+## General Notes
 
-* To install ***latest alpha or beta*** `vmc` tool run: `sudo gem install vmc ---pre`
+*   Get the code right away - Github location: <a href='https://github.com/rajaraodv/rabbitpubsub' target='_blank'>https://github.com/rajaraodv/rabbitpubsub</a>.
+*   Deploy right away - if you don't already have a Cloud Foundry account, sign up for it <a href='https://my.cloudfoundry.com/signup' target='_blank'>here</a>.
+*   Check out Cloud Foundry getting started <a href='http://docs.cloudfoundry.com/getting-started.html' target='_blank'>here</a> and install the `vmc` Ruby command line tool to push apps.
+
+*   To install the ***latest alpha or beta*** `vmc` tool run: `sudo gem install vmc --pre`.
 
 
-####Credits####
-<p>
-PS: Front end UI: <a href="https://github.com/steffenwt/nodejs-pub-sub-chat-demo">https://github.com/steffenwt/nodejs-pub-sub-chat-demo</a></p>

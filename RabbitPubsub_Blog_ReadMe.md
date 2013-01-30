@@ -45,7 +45,13 @@ RabbitMQ has 4 pieces.
 
 ***
 ## Routing Key, Binding Key and types of Exchanges
+
+
 To allow various work-flows like pub-sub, work queues, topics, RPC etc., RabbitMQ allows us to independently configure the type of the Exchange, Routing Key and Binding Key.
+
+<p align='center'>
+  <img src="https://github.com/rajaraodv/rabbitpubsub/raw/master/pics/rabbitmq_workFlows.png" height="300px" width="500px" />
+</p>
 
 #### Routing Key:
 A string/constraint from Producer instructing Exchange how to route the message. A Routing key looks like: "logs", "errors.logs", "warnings.logs" "tweets" etc. 
@@ -65,20 +71,22 @@ Exchanges can be of 4 types:
 3. Topic - Sends a message from producer to consumer based on pattern-matching.
 4. Headers - If more complicated routing is required beyond simple Routing key string, you can use headers exchange.
 
-As you can see the combination of `the type of Exchange`, `Routing Key` and `Binding Key` makes RabbitMQ behaves completely differently. For example: A `Fanout` Exchange ignores `Routing Key` and `Binding Key` and sends messages to all consumers. A `Topic` Exchange sends a copy of a message to zero, one or more consumers. 
+
+
+So as you can see the combination of `the type of Exchange`, `Routing Key` and `Binding Key` makes RabbitMQ behaves completely differently. For example: A `Fanout` Exchange ignores `Routing Key` and `Binding Key` and sends messages to all consumers. A `Topic` Exchange sends a copy of a message to zero, one or more consumers. 
 
 Going into more details is beyond the scope of this blog, but here is another good blog that goes into more details: [AMQP 0-9-1 Model Explained](http://www.rabbitmq.com/tutorials/amqp-concepts.html) 
 
 ***
-## Creating Exchanges, Producers & Consumers in Node.js
-Now that we know some of the basics of RabbitMQ, and all the 4 pieces, let's see how to actually build them in RabbitMQ for our Chat app.
+## Using RabbitMQ to do pub-sub in our Node.js chat app.
+Now that we know some of the basics of RabbitMQ, and all the 4 pieces, let's see how to actually use RabbitMQ for our Chat app.
 
-#### Chat App:
+### Chat App:
 <p align='center'>
   <img src="https://github.com/rajaraodv/rabbitpubsub/raw/master/pics/chatAppPage2.png" height="300px" width="500px" />
 </p>
 
-#### Connecting to RabbitMQ and creating an Exchange
+### Connecting to RabbitMQ and creating an Exchange
 For our chat application, we will create a `fanout` exchange called `chatExchange`. And will be using [node-amqp module](https://github.com/postwait/node-amqp) to talk to RabbitMQ service.
 
 <pre>
@@ -92,7 +100,7 @@ rabbitConn.on('ready', function () {
 });
 </pre>
  
-#### Creating Producers (So Users can send chat messages)
+### Creating Producers (So Users can send chat messages)
 In our chat app, users are both producers(i.e. sends chat messages to others) and also consumers (i.e. recieves messages from others). Let's focus on users being 'producers'.
 
 When a user sends a chat message, publish it to chatExchange w/o a Routing Key (Routing Key doesn't matter because chatExchange is a 'fanout').
@@ -125,7 +133,7 @@ Similarly, when a user joins, publish it to chatExchange w/o Routing key.
     });
 </pre>
 
-#### Creating Consumers (So Users can receive chat messages)
+### Creating Consumers (So Users can receive chat messages)
 Creating consumers involves 3 steps:
 
 1. Create a queue with some options.
@@ -200,3 +208,111 @@ sessionSockets.on('connection', function (err, socket, session) {
     });
  });
 </pre>
+
+## Running / Testing it on Cloud Foundry ##
+* Clone this app to `rabbitpubsub` folder
+* ` cd rabbitpubsub`
+* `npm install` & follow the below instructions to push the app to Cloud Foundry
+
+<pre>
+
+[~/success/git/rabbitpubsub]
+> vmc push rabbitpubsub
+Instances> 4       <----- Run 4 instances of the server
+
+1: node
+2: other
+Framework> node
+
+1: node
+2: node06
+3: node08
+4: other
+Runtime> 3  <---- Choose Node.js 0.8v
+
+1: 64M
+2: 128M
+3: 256M
+4: 512M
+Memory Limit> 64M
+
+Creating rabbitpubsub... OK
+
+1: rabbitpubsub.cloudfoundry.com
+2: none
+URL> rabbitpubsub.cloudfoundry.com  <--- URL of the app (choose something unique)
+
+Updating rabbitpubsub... OK
+
+Create services for application?> y
+
+1: blob 0.51
+2: mongodb 2.0
+3: mysql 5.1
+4: postgresql 9.0
+5: rabbitmq 2.4
+6: redis 2.6
+7: redis 2.4
+8: redis 2.2
+What kind?> 5 <----- Select & Add RabbitMQ 2.4v service (for pub-sub)
+
+Name?> rabbit-e1223 <-- This is just random name for RabbitMQ service
+
+Creating service rabbit-e1223... OK
+Binding rabbit-e1223 to rabbitpubsub... OK
+
+Create another service?> y
+
+1: blob 0.51
+2: mongodb 2.0
+3: mysql 5.1
+4: postgresql 9.0
+5: rabbitmq 2.4
+6: redis 2.6
+7: redis 2.4
+8: redis 2.2
+What kind?> 6 <----- Select & Add Redis 2.6v service (for session store)
+
+Name?> redis-e9771 <-- This is just random name for Redis service
+
+Creating service redis-e9771... OK
+Binding redis-e9771 to rabbitpubsub... OK
+
+Bind other services to application?> n
+
+Save configuration?> n
+
+Uploading rabbitpubsub... OK
+Starting rabbitpubsub... OK
+Checking rabbitpubsub... OK
+
+</pre>
+
+* Once the server is up,o open up multiple browsers and go do `<servername>.cloudfoundry.com`
+* Start chatting.
+
+#### Test 1 ####
+
+* Refresh the browser.
+* You should automatically be logged in.
+
+
+#### Test 2 ####
+
+* Open up JS debugger (On Chrome, do `cmd + alt +j` )
+* Restart the server by doing `vmc restart <appname>`
+* Once the server restarts, Socket.io should automatically reconnect
+* You should be able to chat after the reconnection.
+
+That's it for now. Hopefully this blog helps you get started with using RabbitMQ. Look forward for more Node.j and RabbitMQ related blogs.
+
+
+## General Notes
+
+*   Get the code right away - Github location: <a href='https://github.com/rajaraodv/rabbitpubsub' target='_blank'>https://github.com/rajaraodv/rabbitpubsub</a>.
+*   Deploy right away - if you don't already have a Cloud Foundry account, sign up for it <a href='https://my.cloudfoundry.com/signup' target='_blank'>here</a>.
+*   Check out Cloud Foundry getting started <a href='http://docs.cloudfoundry.com/getting-started.html' target='_blank'>here</a> and install the `vmc` Ruby command line tool to push apps.
+
+*   To install the ***latest alpha or beta*** `vmc` tool run: `sudo gem install vmc --pre`.
+
+
