@@ -76,7 +76,7 @@ Exchanges can be of 4 types:
 
 
 
-In RabbitMQ the combination of `the type of Exchange`, `Routing Key` and `Binding Key` make it behave completely differently. For example: A `fanout` Exchange ignores `Routing Key` and `Binding Key` and sends messages to all consumers. A `Topic` Exchange sends a copy of a message to zero, one or more consumers.
+In RabbitMQ the combination of `the type of Exchange`, `Routing Key` and `Binding Key` make it behave completely differently. For example: A `fanout` Exchange ignores `Routing Key` and `Binding Key` and sends messages to all queues. A `Topic` Exchange sends a copy of a message to zero, one or more consumers based on RabbitMQ patterns (#, *).
 
 Going into more details is beyond the scope of this blog, but here is another good blog that goes into more details: <a href='http://www.rabbitmq.com/tutorials/amqp-concepts.html' target='_blank'>AMQP 0-9-1 Model Explained</a>
 
