@@ -152,7 +152,7 @@ For our chat app,
  }
 </pre>
 
-2. Then bind the queue to chatExchange  w/ "#" or "" 'Binding key' and listen to ALL messages.
+2. Then bind the queue to chatExchange with an empty 'Binding key' and listen to ALL messages.
 <pre>
  q.bind('chatExchange', "");
 </pre>
