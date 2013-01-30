@@ -294,16 +294,15 @@ Checking rabbitpubsub... OK
 * Once the server is up, open up multiple browsers and go to `<servername>.cloudfoundry.com`
 * Start chatting.
 
+***
 ## Tests
 
 #### Test 1
-
-* Refresh the browser.
+* While chatting, refresh the browser.
 * You should automatically be logged in.
 
 
 #### Test 2
-
 * Open up JS debugger (On Chrome, do `cmd + alt +j` )
 * Restart the server by doing `vmc restart <appname>`
 * Once the server restarts, Socket.io should automatically reconnect
@@ -311,7 +310,7 @@ Checking rabbitpubsub... OK
 
 That's it for now. Hopefully this blog helps you get started with using RabbitMQ. Look forward for more Node.js and RabbitMQ related blogs.
 
-
+***
 ## General Notes
 
 *   Get the code right away - Github location: <a href='https://github.com/rajaraodv/rabbitpubsub' target='_blank'>https://github.com/rajaraodv/rabbitpubsub</a>.
