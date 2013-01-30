@@ -5,7 +5,7 @@ So, in this blog, we will start from [Scaling Real-time Apps on Cloud Foundry Us
 The app architecture (before):
 
 <p align='center'>
-  <img src="https://github.com/rajaraodv/redispubsub/raw/master/pics/redisAsSSAndPS.png" height="300px" width="500px" />
+  <img src="https://github.com/rajaraodv/redispubsub/raw/master/pics/redisAsSSAndPS.png" height="400px" width="600px" />
 </p>
 
 
@@ -13,7 +13,7 @@ The app architecture (before):
 The app architecture w/ RabbitMQ (after):
 
 <p align='center'>
-  <img src="https://raw.github.com/rajaraodv/rabbitpubsub/master/pics/finalArchitecture.png" height="300px" width="500px" />
+  <img src="https://raw.github.com/rajaraodv/rabbitpubsub/master/pics/finalArchitecture.png" height="400px" width="600px" />
 </p>
 
 
