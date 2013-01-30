@@ -25,7 +25,7 @@ RabbitMQ is a message broker. It simply accepts message from one or more produce
 
 RabbitMQ is more sophisticated and flexible than just that. Depending on the configuration, it can also figure out what needs to be done when a consumer crashes(store and re-deliver message), when consumer is slow (queue messages), when there are multiple consumers (distribute work load), or even when RabbitMQ itself crashes (durable). For more please see: [RabbitMQ tutorials](http://www.rabbitmq.com/tutorials/tutorial-one-python.html).
 
-RabbitMQ is also very fast. It uses AMQP protocol [built by and for Wall Street firms like J.P. Morgan Chase, Goldman Sachs etc](http://en.wikipedia.org/wiki/Advanced_Message_Queuing_Protocol#History) for trading stocks and related activities. RabbitMQ is an Erlang (also well-known for concurrency & speed) implementation of that protocol.
+RabbitMQ is also very fast. It implements AMQP protocol [built by and for Wall Street firms like J.P. Morgan Chase, Goldman Sachs etc](http://en.wikipedia.org/wiki/Advanced_Message_Queuing_Protocol#History) for trading stocks and related activities. RabbitMQ is an Erlang (also well-known for concurrency & speed) implementation of that protocol.
  
 
 For more please go through [RabbitMQ's website](http://www.rabbitmq.com).
@@ -71,6 +71,132 @@ Going into more details is beyond the scope of this blog, but here is another go
 
 ***
 ## Creating Exchanges, Producers & Consumers in Node.js
+Now that we know some of the basics of RabbitMQ, and all the 4 pieces, let's see how to actually build them in RabbitMQ for our Chat app.
 
+#### Chat App:
+<p align='center'>
+  <img src="https://github.com/rajaraodv/rabbitpubsub/raw/master/pics/chatAppPage2.png" height="300px" width="500px" />
+</p>
+
+#### Connecting to RabbitMQ and creating an Exchange
+For our chat application, we will create a `fanout` exchange called `chatExchange`. And will be using [node-amqp module](https://github.com/postwait/node-amqp) to talk to RabbitMQ service.
+
+<pre>
+//Connect to RabbitMQ and get reference to the connection.
+var rabbitConn = amqp.createConnection({});
+
+//Create an exchange with a name 'chatExchange' and of type 'fanout'
+var chatExchange;
+rabbitConn.on('ready', function () {
+    chatExchange = rabbitConn.exchange('chatExchange', {'type': 'fanout'});
+});
+</pre>
  
- 
+#### Creating Producers (So Users can send chat messages)
+In our chat app, users are both producers(i.e. sends chat messages to others) and also consumers (i.e. recieves messages from others). Let's focus on users being 'producers'.
+
+When a user sends a chat message, publish it to chatExchange w/o a Routing Key (Routing Key doesn't matter because chatExchange is a 'fanout').
+
+<pre>
+    /**
+     * When a user sends a chat message, publish it to chatExchange w/o a Routing Key (Routing Key doesn't matter
+     * because chatExchange is a 'fanout').
+     *
+     * Notice that we are getting user's name from session.
+     */
+    socket.on('chat', function (data) {
+        var msg = JSON.parse(data);
+        var reply = {action: 'message', user: session.user, msg: msg.msg };
+        chatExchange.publish('', reply);
+    });
+</pre>
+
+Similarly, when a user joins, publish it to chatExchange w/o Routing key.
+<pre>
+   /**
+     * When a user joins, publish it to chatExchange w/o Routing key (Routing doesn't matter
+     * because chatExchange is a 'fanout').
+     *
+     * Note: that we are getting user's name from session.
+     */
+    socket.on('join', function () {
+        var reply = {action: 'control', user: session.user, msg: ' joined the channel' };
+        chatExchange.publish('', reply);
+    });
+</pre>
+
+#### Creating Consumers (So Users can receive chat messages)
+Creating consumers involves 3 steps:
+
+1. Create a queue with some options.
+2. Bind queue to exchange using some "Binding Key"
+3. Create a subscriber (usually a callback function) to actually obtain messages sent to the queue.
+
+For our chat app,
+
+1. Let's create a queue w/o any name. This forces RabbitMQ to create new queue for every socket.io connection w/ a new random queue name. Let's also set `exclusive` flag to ensure only one connection exists.
+<pre>
+ rabbitConn.queue('', {exclusive: true}, function (q) {
+ ..
+ }
+</pre>
+
+2. Then bind the queue to chatExchange  w/ "#" or "" 'Binding key' and listen to ALL messages.
+<pre>
+ q.bind('chatExchange', "");
+</pre>
+3. Lastly, create a consumer (via q.subscribe) that waits for messages from RabbitMQ. And when a message comes, send it to the browser.
+<pre>
+ q.subscribe(function (message) {
+   //When a message comes, send it back to browser
+   socket.emit('chat', JSON.stringify(message));
+ });
+</pre>
+
+Putting it all togeather.
+<pre>
+sessionSockets.on('connection', function (err, socket, session) {
+    /**
+     * When a user sends a chat message, publish it to chatExchange w/o a Routing Key (Routing Key doesn't matter
+     * because chatExchange is a 'fanout').
+     *
+     * Notice that we are getting user's name from session.
+     */
+    socket.on('chat', function (data) {
+        var msg = JSON.parse(data);
+        var reply = {action: 'message', user: session.user, msg: msg.msg };
+        chatExchange.publish('', reply);
+    });
+
+   /**
+     * When a user joins, publish it to chatExchange w/o Routing key (Routing doesn't matter
+     * because chatExchange is a 'fanout').
+     *
+     * Note: that we are getting user's name from session.
+     */
+    socket.on('join', function () {
+        var reply = {action: 'control', user: session.user, msg: ' joined the channel' };
+        chatExchange.publish('', reply);
+    });
+
+
+   /**
+     * Initialize subscriber queue.
+     * 1. First create a queue w/o any name. This forces RabbitMQ to create new queue for every socket.io connection w/ a new random queue name.
+     * 2. Then bind the queue to chatExchange  w/ "#" or "" 'Binding key' and listen to ALL messages
+     * 3. Lastly, create a consumer (via .subscribe) that waits for messages from RabbitMQ. And when
+     * a message comes, send it to the browser.
+     *
+     * Note: we are creating this w/in sessionSockets.on('connection'..) to create NEW queue for every connection
+   */
+    rabbitConn.queue('', {exclusive: true}, function (q) {
+        //Bind to chatExchange w/ "#" or "" binding key to listen to all messages.
+        q.bind('chatExchange', "");
+
+   //Subscribe When a message comes, send it back to browser
+        q.subscribe(function (message) {
+            socket.emit('chat', JSON.stringify(message));
+        });
+    });
+ });
+</pre>

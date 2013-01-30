@@ -96,7 +96,6 @@ sessionSockets.on('connection', function (err, socket, session) {
     socket.on('chat', function (data) {
         var msg = JSON.parse(data);
         var reply = {action: 'message', user: session.user, msg: msg.msg };
-        // pub.publish('chat', reply);
         chatExchange.publish('', reply);
     });
 
