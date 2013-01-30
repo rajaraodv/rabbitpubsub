@@ -1,8 +1,8 @@
-In the previous blog [Scaling Real-time Apps on Cloud Foundry Using Node.js and Redis](http://blog.cloudfoundry.com/2013/01/24/scaling-real-time-apps-on-cloud-foundry-using-node-js-and-redis/), we used Redis as Session Store and also as a pub-sub service for chat messages. But in many enterprise grade real-time apps, you may want to use RabbitMQ instead of Redis to do pub-sub. This is especially true for financial or Bank apps like Stock Quote apps where it is critical to *protect* and deliver each-and-every message AND do it as quickly as possible.
+In the previous blog <a href='http://blog.cloudfoundry.com/2013/01/24/scaling-real-time-apps-on-cloud-foundry-using-node-js-and-redis/' target='_blank'>Scaling Real-time Apps on Cloud Foundry Using Node.js and Redis</a>, we used Redis as a `session store` and also as a `pub-sub` service for chat messages. But in many enterprise grade real-time apps, you may want to use RabbitMQ instead of Redis to do pub-sub because of the reliability and features that comes out-of-the-box in RabbitMQ. This is especially true for financial or Bank apps like Stock Quote apps where it is critical to `protect and deliver each-and-every message` AND do it as `quickly as possible`.
 
-So, in this blog, we will start from [Scaling Real-time Apps on Cloud Foundry Using Node.js and Redis](http://blog.cloudfoundry.com/2013/01/24/scaling-real-time-apps-on-cloud-foundry-using-node-js-and-redis/) and simply replace Redis with RabbitMQ pubsub.
+So, in this blog, we will start from <a href='http://blog.cloudfoundry.com/2013/01/24/scaling-real-time-apps-on-cloud-foundry-using-node-js-and-redis/' target='_blank'>Scaling Real-time Apps on Cloud Foundry Using Node.js and Redis</a> and simply replace Redis with RabbitMQ pubsub.
 
-The app architecture (before):
+#### The app architecture (before):
 
 <p align='center'>
   <img src="https://github.com/rajaraodv/redispubsub/raw/master/pics/redisAsSSAndPS.png" height="400px" width="600px" />
@@ -10,7 +10,7 @@ The app architecture (before):
 
 
 
-The app architecture w/ RabbitMQ (after):
+#### The app architecture w/ RabbitMQ (after):
 
 <p align='center'>
   <img src="https://raw.github.com/rajaraodv/rabbitpubsub/master/pics/finalArchitecture.png" height="400px" width="600px" />
@@ -18,30 +18,36 @@ The app architecture w/ RabbitMQ (after):
 
 
 ***
-## Intro to RabbitMQ
+## Introduction to RabbitMQ
 Node.js community may not be familiar with RabbitMQ. So here are some of the high-level intro of RabbitMQ.
 
-RabbitMQ is a message broker. It simply accepts message from one or more producers and sends it to one or more consumers.
+RabbitMQ is a message broker. It simply accepts message from one or more endpoints "Producers" and sends it to one or more endpoints "Consumers".
 
 RabbitMQ is more sophisticated and flexible than just that. Depending on the configuration, it can also figure out what needs to be done when a consumer crashes(store and re-deliver message), when consumer is slow (queue messages), when there are multiple consumers (distribute work load), or even when RabbitMQ itself crashes (durable). For more please see: [RabbitMQ tutorials](http://www.rabbitmq.com/tutorials/tutorial-one-python.html).
 
-RabbitMQ is also very fast. It implements AMQP protocol [built by and for Wall Street firms like J.P. Morgan Chase, Goldman Sachs etc](http://en.wikipedia.org/wiki/Advanced_Message_Queuing_Protocol#History) for trading stocks and related activities. RabbitMQ is an Erlang (also well-known for concurrency & speed) implementation of that protocol.
+RabbitMQ is also ***very fast & efficient***. It implements Advanced Message Queuing Protocol "AMQP" that was <a href='http://en.wikipedia.org/wiki/Advanced_Message_Queuing_Protocol#History' target='_blank'>built by and for Wall Street firms like J.P. Morgan Chase, Goldman Sachs etc.</a> for trading stocks and related activities. RabbitMQ is an Erlang (also well-known for concurrency & speed) implementation of that protocol.
 
 
-For more please go through [RabbitMQ's website](http://www.rabbitmq.com).
+<p align='center'>
+<a href='http://www.rabbitmq.com/getstarted.html' target='_blank'>
+  <img src="https://github.com/rajaraodv/rabbitpubsub/raw/master/pics/rabbitmq_workFlows.png" height="400px" width="600px" />
+  </a>
+</p>
+
+For more please go through <a href='http://www.rabbitmq.com' target='_blank'>RabbitMQ's website</a>.
 
 ***
-## RabbitMQ Basics
+##Fundamental pieces of RabbitMQ
 <p align="center">
-<img src="https://raw.github.com/rajaraodv/rabbitpubsub/master/pics/rabbitmq.png" />
+<img src="https://raw.github.com/rajaraodv/rabbitpubsub/master/pics/rabbitmq.png" height="150px" width="380px"/>
 </p>
 
 RabbitMQ has 4 pieces.
 
-1. Producer ("P") - Sends messages to an exhange along with "Routing key" indicating how to route the message.
-2. Exchange ("X") - Recieves message and Routing key from Producers and figures out what to do with the message.
-3. Queues("Q") - A temporary place where the messages are stored based on Queue's "binding key" until a consumer is ready to recieve the message. Note: While a Queue physically resides inside RabbitMQ, A consumer is the one that actually creates it by providing a "Binding Key".
-4. Consumer("C") - Subscribes to a Queue to recieve messages.
+1. Producer ("P") - Sends messages to an exchange along with "Routing key" indicating how to route the message.
+2. Exchange ("X") - Receives message and Routing key from Producers and figures out what to do with the message.
+3. Queues("Q") - A temporary place where the messages are stored based on Queue's "binding key" until a consumer is ready to receive the message. Note: While a Queue physically resides inside RabbitMQ, a consumer ("C") is the one that actually creates it by providing a "Binding Key".
+4. Consumer("C") - Subscribes to a Queue to receive messages.
 
 ***
 ## Routing Key, Binding Key and types of Exchanges
@@ -49,9 +55,6 @@ RabbitMQ has 4 pieces.
 
 To allow various work-flows like pub-sub, work queues, topics, RPC etc., RabbitMQ allows us to independently configure the type of the Exchange, Routing Key and Binding Key.
 
-<p align='center'>
-  <img src="https://github.com/rajaraodv/rabbitpubsub/raw/master/pics/rabbitmq_workFlows.png" height="300px" width="500px" />
-</p>
 
 #### Routing Key:
 A string/constraint from Producer instructing Exchange how to route the message. A Routing key looks like: "logs", "errors.logs", "warnings.logs" "tweets" etc.
@@ -73,13 +76,13 @@ Exchanges can be of 4 types:
 
 
 
-So as you can see the combination of `the type of Exchange`, `Routing Key` and `Binding Key` makes RabbitMQ behaves completely differently. For example: A `Fanout` Exchange ignores `Routing Key` and `Binding Key` and sends messages to all consumers. A `Topic` Exchange sends a copy of a message to zero, one or more consumers.
+In RabbitMQ the combination of `the type of Exchange`, `Routing Key` and `Binding Key` make it behave completely differently. For example: A `fanout` Exchange ignores `Routing Key` and `Binding Key` and sends messages to all consumers. A `Topic` Exchange sends a copy of a message to zero, one or more consumers.
 
-Going into more details is beyond the scope of this blog, but here is another good blog that goes into more details: [AMQP 0-9-1 Model Explained](http://www.rabbitmq.com/tutorials/amqp-concepts.html)
+Going into more details is beyond the scope of this blog, but here is another good blog that goes into more details: <a href='http://www.rabbitmq.com/tutorials/amqp-concepts.html' target='_blank'>AMQP 0-9-1 Model Explained</a>
 
 ***
 ## Using RabbitMQ to do pub-sub in our Node.js chat app.
-Now that we know some of the basics of RabbitMQ, and all the 4 pieces, let's see how to actually use RabbitMQ for our Chat app.
+Now that we know some of the basics of RabbitMQ, and all the 4 pieces, let's see how to actually use it in our Chat app.
 
 ### Chat App:
 <p align='center'>
@@ -101,7 +104,7 @@ rabbitConn.on('ready', function () {
 </pre>
 
 ### Creating Producers (So Users can send chat messages)
-In our chat app, users are both producers(i.e. sends chat messages to others) and also consumers (i.e. recieves messages from others). Let's focus on users being 'producers'.
+In our chat app, users are both producers(i.e. sends chat messages to others) and also consumers (i.e. receives messages from others). Let's focus on users being 'producers'.
 
 When a user sends a chat message, publish it to chatExchange w/o a Routing Key (Routing Key doesn't matter because chatExchange is a 'fanout').
 
@@ -161,7 +164,7 @@ For our chat app,
  });
 </pre>
 
-Putting it all togeather.
+Putting it all together.
 <pre>
 sessionSockets.on('connection', function (err, socket, session) {
     /**
