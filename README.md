@@ -1,4 +1,4 @@
-In the previous blog <a href='http://blog.cloudfoundry.com/2013/01/24/scaling-real-time-apps-on-cloud-foundry-using-node-js-and-redis/' target='_blank'>Scaling Real-time Apps on Cloud Foundry Using Node.js and Redis</a>, we used Redis as a 'session store' and also as a pub-sub' service for chat messages. But in many enterprise grade real-time apps, you may want to use RabbitMQ instead of Redis to do pub-sub because of the reliability and features that comes out-of-the-box in RabbitMQ. This is especially true for financial or Bank apps like Stock Quote apps where it is critical to ***protect and deliver each-and-every message*** AND do it as ***quickly as possible***.
+In the previous blog <a href='http://blog.cloudfoundry.com/2013/01/24/scaling-real-time-apps-on-cloud-foundry-using-node-js-and-redis/' target='_blank'>Scaling Real-time Apps on Cloud Foundry Using Node.js and Redis</a>, we used Redis as a 'session store' and also as a 'pub-sub' service for chat messages. But in many enterprise grade real-time apps, you may want to use RabbitMQ instead of Redis to do pub-sub because of the reliability and features that comes out-of-the-box in RabbitMQ. This is especially true for financial or Bank apps like Stock Quote apps where it is critical to ***protect and deliver each-and-every message*** AND do it as ***quickly as possible***.
 
 So, in this blog, we will start from <a href='http://blog.cloudfoundry.com/2013/01/24/scaling-real-time-apps-on-cloud-foundry-using-node-js-and-redis/' target='_blank'>Scaling Real-time Apps on Cloud Foundry Using Node.js and Redis</a> and simply replace Redis with RabbitMQ pubsub.
 
@@ -259,7 +259,7 @@ Create services for application?> y
 8: redis 2.2
 What kind?> 5 <----- Select & Add RabbitMQ 2.4v service (for pub-sub)
 
-Name?> rabbit-e1223 <-- This is just random name for RabbitMQ service
+Name?> rabbit-e1223 <-- This is just a random name for RabbitMQ service
 
 Creating service rabbit-e1223... OK
 Binding rabbit-e1223 to rabbitpubsub... OK
@@ -276,7 +276,7 @@ Create another service?> y
 8: redis 2.2
 What kind?> 6 <----- Select & Add Redis 2.6v service (for session store)
 
-Name?> redis-e9771 <-- This is just random name for Redis service
+Name?> redis-e9771 <-- This is just a random name for Redis service
 
 Creating service redis-e9771... OK
 Binding redis-e9771 to rabbitpubsub... OK
@@ -294,13 +294,15 @@ Checking rabbitpubsub... OK
 * Once the server is up, open up multiple browsers and go to `<servername>.cloudfoundry.com`
 * Start chatting.
 
-#### Test 1 ####
+## Tests
+
+#### Test 1
 
 * Refresh the browser.
 * You should automatically be logged in.
 
 
-#### Test 2 ####
+#### Test 2
 
 * Open up JS debugger (On Chrome, do `cmd + alt +j` )
 * Restart the server by doing `vmc restart <appname>`
@@ -315,7 +317,6 @@ That's it for now. Hopefully this blog helps you get started with using RabbitMQ
 *   Get the code right away - Github location: <a href='https://github.com/rajaraodv/rabbitpubsub' target='_blank'>https://github.com/rajaraodv/rabbitpubsub</a>.
 *   Deploy right away - if you don't already have a Cloud Foundry account, sign up for it <a href='https://my.cloudfoundry.com/signup' target='_blank'>here</a>.
 *   Check out Cloud Foundry getting started <a href='http://docs.cloudfoundry.com/getting-started.html' target='_blank'>here</a> and install the `vmc` Ruby command line tool to push apps.
-
 *   To install the ***latest alpha or beta*** `vmc` tool run: `sudo gem install vmc --pre`.
 
 
