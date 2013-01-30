@@ -145,7 +145,7 @@ Creating consumers involves 3 steps:
 
 For our chat app,
 
-1. Let's create a queue w/o any name. This forces RabbitMQ to create a new queue for every socket.io connection w/ a new random queue name. Let's also set `exclusive` flag to ensure only one connection exists.
+1. Let's create a queue w/o any name. This forces RabbitMQ to create new queue for every socket.io connection w/ a new random queue name. Let's also set `exclusive` flag to ensure only this consumer can access the messages from this queue.
 <pre>
  rabbitConn.queue('', {exclusive: true}, function (q) {
  ..
