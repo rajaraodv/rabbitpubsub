@@ -19,13 +19,13 @@ So, in this blog, we will start from <a href='http://blog.cloudfoundry.com/2013/
 
 ***
 ## Introduction to RabbitMQ
-Node.js community may not be familiar with RabbitMQ. So here are some of the high-level intro of RabbitMQ.
+The Node.js community may not be familiar with RabbitMQ. So here are some of the high-level intro of RabbitMQ.
 
-RabbitMQ is a message broker. It simply accepts message from one or more endpoints "Producers" and sends it to one or more endpoints "Consumers".
+RabbitMQ is a message broker. It simply accepts messages from one or more endpoints "Producers" and sends it to one or more endpoints "Consumers".
 
 RabbitMQ is more sophisticated and flexible than just that. Depending on the configuration, it can also figure out what needs to be done when a consumer crashes(store and re-deliver message), when consumer is slow (queue messages), when there are multiple consumers (distribute work load), or even when RabbitMQ itself crashes (durable). For more please see: [RabbitMQ tutorials](http://www.rabbitmq.com/tutorials/tutorial-one-python.html).
 
-RabbitMQ is also ***very fast & efficient***. It implements Advanced Message Queuing Protocol "AMQP" that was <a href='http://en.wikipedia.org/wiki/Advanced_Message_Queuing_Protocol#History' target='_blank'>built by and for Wall Street firms like J.P. Morgan Chase, Goldman Sachs etc.</a> for trading stocks and related activities. RabbitMQ is an Erlang (also well-known for concurrency & speed) implementation of that protocol.
+RabbitMQ is also ***very fast & efficient***. It implements Advanced Message Queuing Protocol "AMQP" that was <a href='http://en.wikipedia.org/wiki/Advanced_Message_Queuing_Protocol#History' target='_blank'>built by and for Wall Street firms like J.P. Morgan Chase, Goldman Sachs, etc.</a> for trading stocks and related activities. RabbitMQ is an Erlang (also well-known for concurrency & speed) implementation of that protocol.
 
 
 <p align='center'>
@@ -145,7 +145,7 @@ Creating consumers involves 3 steps:
 
 For our chat app,
 
-1. Let's create a queue w/o any name. This forces RabbitMQ to create new queue for every socket.io connection w/ a new random queue name. Let's also set `exclusive` flag to ensure only one connection exists.
+1. Let's create a queue w/o any name. This forces RabbitMQ to create a new queue for every socket.io connection w/ a new random queue name. Let's also set `exclusive` flag to ensure only one connection exists.
 <pre>
  rabbitConn.queue('', {exclusive: true}, function (q) {
  ..
@@ -291,7 +291,7 @@ Checking rabbitpubsub... OK
 
 </pre>
 
-* Once the server is up,o open up multiple browsers and go do `<servername>.cloudfoundry.com`
+* Once the server is up, open up multiple browsers and go to `<servername>.cloudfoundry.com`
 * Start chatting.
 
 #### Test 1 ####
@@ -307,7 +307,7 @@ Checking rabbitpubsub... OK
 * Once the server restarts, Socket.io should automatically reconnect
 * You should be able to chat after the reconnection.
 
-That's it for now. Hopefully this blog helps you get started with using RabbitMQ. Look forward for more Node.j and RabbitMQ related blogs.
+That's it for now. Hopefully this blog helps you get started with using RabbitMQ. Look forward for more Node.js and RabbitMQ related blogs.
 
 
 ## General Notes
