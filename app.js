@@ -9,7 +9,7 @@ var express = require('express')
 var rabbitConn = amqp.createConnection({});
 var chatExchange;
 rabbitConn.on('ready', function () {
-    chatExchange = rabbitConn.exchange('chatExchange', {'type':'fanout'});
+    chatExchange = rabbitConn.exchange('chatExchange', {'type': 'fanout'});
 });
 
 
@@ -32,7 +32,7 @@ io.set('log level', 1);
  */
 var RedisStore = require('connect-redis')(express),
     rClient = redis.createClient(),
-    sessionStore = new RedisStore({client:rClient});
+    sessionStore = new RedisStore({client: rClient});
 
 var cookieParser = express.cookieParser('your secret here');
 
@@ -53,7 +53,7 @@ app.configure(function () {
      If you are NOT running on Cloud Foundry, having cookie name 'jsessionid' doesn't hurt - it's just a cookie name.
      */
     app.use(cookieParser);
-    app.use(express.session({store:sessionStore, key:'jsessionid', secret:'your secret here'}));
+    app.use(express.session({store: sessionStore, key: 'jsessionid', secret: 'your secret here'}));
 
     app.use(app.router);
     app.use(express.static(path.join(__dirname, 'public')));
@@ -65,13 +65,18 @@ app.configure('development', function () {
 
 app.get('/', routes.index);
 
+app.get('/logout', function(req, res) {
+    req.session.destroy();
+    res.redirect('/');
+});
+
 /*
  When the user logs in (in our case, does http POST w/ user name), store it
  in Express session (which in turn is stored in Redis)
  */
 app.post('/user', function (req, res) {
     req.session.user = req.body.user;
-    res.json({"error":""});
+    res.json({"error": ""});
 });
 
 /*
@@ -82,40 +87,45 @@ var SessionSockets = require('session.socket.io');
 var sessionSockets = new SessionSockets(io, sessionStore, cookieParser, 'jsessionid');
 
 sessionSockets.on('connection', function (err, socket, session) {
-    /*
-     When a user sends a chat message, publish it to chatExchange w/o binding key (bindingKey doesn't matter
-     because chatExchange is fanout).
-     Notice that we are getting user's name from session.
+    /**
+     * When a user sends a chat message, publish it to chatExchange w/o a Routing Key (Routing Key doesn't matter
+     * because chatExchange is a 'fanout').
+     *
+     * Notice that we are getting user's name from session.
      */
     socket.on('chat', function (data) {
         var msg = JSON.parse(data);
-        var reply = {action:'message', user:session.user, msg:msg.msg };
+        var reply = {action: 'message', user: session.user, msg: msg.msg };
         // pub.publish('chat', reply);
         chatExchange.publish('', reply);
     });
 
-    /*
-     When a user joins, publish it to chatExchange w/o binding key (bindingKey doesn't matter
-     because chatExchange is fanout).
-     Notice that we are getting user's name from session.
+    /**
+     * When a user joins, publish it to chatExchange w/o Routing key (Routing doesn't matter
+     * because chatExchange is a 'fanout').
+     *
+     * Note: that we are getting user's name from session.
      */
     socket.on('join', function () {
-        var reply = {action:'control', user:session.user, msg:' joined the channel' };
+        var reply = {action: 'control', user: session.user, msg: ' joined the channel' };
         chatExchange.publish('', reply);
     });
 
 
-    /*Initialize subscriber queue.
-     First create a queue w/o any name. This forces RabbitMQ to create new queue
-     for every socket.io connection w/ a new random queue name.
-     Then bind the queue to chatExchange and listen to ALL messages
-     Lastly, create a consumer (via .subscribe) that waits for messages from RabbitMQ. And when
-     a message comes, send it to the browser.
-
-     Notice that we are creating this w/in sessionSockets.on('connection' to create NEW queue for every connection
+    /**
+     * Initialize subscriber queue.
+     * 1. First create a queue w/o any name. This forces RabbitMQ to create new queue for every socket.io connection w/ a new random queue name.
+     * 2. Then bind the queue to chatExchange  w/ "#" or "" 'Binding key' and listen to ALL messages
+     * 3. Lastly, create a consumer (via .subscribe) that waits for messages from RabbitMQ. And when
+     * a message comes, send it to the browser.
+     *
+     * Note: we are creating this w/in sessionSockets.on('connection'..) to create NEW queue for every connection
      */
-    rabbitConn.queue('', {exclusive:true}, function (q) {
-        q.bind('chatExchange', "#"); // bind to chat ALL channel/bindingKey
+    rabbitConn.queue('', {exclusive: true}, function (q) {
+        //Bind to chatExchange w/ "#" or "" binding key to listen to all messages.
+        q.bind('chatExchange', "");
+
+        //Subscribe When a message comes, send it back to browser
         q.subscribe(function (message) {
             socket.emit('chat', JSON.stringify(message));
         });
